@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Medical Chatbot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <main class="chat-shell">
+      <section class="chat-panel" aria-label="Medical chatbot">
+        <header class="chat-header">
+          <div class="brand-lockup">
+            <div class="brand-mark" aria-hidden="true">+</div>
+            <div>
+              <p class="eyebrow">Medical reference assistant</p>
+              <h1>Ask with confidence.</h1>
+              <p class="header-note">Answers grounded in your indexed medical book.</p>
+            </div>
+          </div>
+          <span class="status" id="status"><span class="status-dot"></span>Ready</span>
+        </header>
+
+        {% if startup_error %}
+          <div class="alert">{{ startup_error }}</div>
+        {% endif %}
+
+        <div class="messages" id="messages" aria-live="polite">
+          <article class="message bot welcome-message">
+            <div class="message-avatar" aria-hidden="true">+</div>
+            <div>
+              <p class="message-label">Medibook assistant</p>
+              <p>Hello. I can help you explore the medical book. What would you like to know?</p>
+            </div>
+          </article>
+        </div>
+
+        <div class="suggestions" aria-label="Suggested questions">
+          <button type="button" class="suggestion" data-question="What are the common treatments for acne?">Acne treatments</button>
+          <button type="button" class="suggestion" data-question="What are the warning signs of heart disease?">Heart health</button>
+          <button type="button" class="suggestion" data-question="What should I do if symptoms get worse?">When to seek care</button>
+        </div>
+
+        <form class="composer" id="chat-form">
+          <div class="input-wrap">
+            <input id="message" name="msg" type="text" autocomplete="off" placeholder="Ask a medical question..." aria-label="Ask a medical question" required>
+            <span class="input-hint">Enter to send</span>
+          </div>
+          <button type="submit" aria-label="Send question"><span>Send</span><span class="send-icon" aria-hidden="true">&#8594;</span></button>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      const form = document.querySelector("#chat-form");
+      const input = document.querySelector("#message");
+      const messages = document.querySelector("#messages");
+      const status = document.querySelector("#status");
+
+      function escapeHtml(value) {
+        return value.replace(/[&<>'"]/g, (character) => ({
+          "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+        }[character]));
+      }
+
+      function renderAnswer(text) {
+        const lines = escapeHtml(text.trim()).split("\n");
+        let html = "";
+        let listItems = [];
+        let index = 0;
+
+        const flushList = () => {
+          if (listItems.length) {
+            html += `<ul>${listItems.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+            listItems = [];
+          }
+        };
+
+        while (index < lines.length) {
+          const line = lines[index].trim();
+          if (!line) {
+            flushList();
+            index += 1;
+            continue;
+          }
+
+          if (line.startsWith("|") && line.endsWith("|")) {
+            flushList();
+            const rows = [];
+            while (index < lines.length && lines[index].trim().startsWith("|") && lines[index].trim().endsWith("|")) {
+              rows.push(lines[index].trim().slice(1, -1).split("|").map((cell) => cell.trim()));
+              index += 1;
+            }
+            const header = rows[0] || [];
+            const body = rows.slice(1).filter((row) => !row.every((cell) => /^[-: ]+$/.test(cell)));
+            html += `<div class="table-scroll"><table><thead><tr>${header.map((cell) => `<th>${cell}</th>`).join("")}</tr></thead><tbody>${body.map((row) => `<tr>${row.map((cell) => `<td>${cell.replace(/&lt;br&gt;/g, "<br>")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+            continue;
+          }
+
+          const listMatch = line.match(/^(?:\d+\.|[-*])\s+(.+)$/);
+          if (listMatch) {
+            listItems.push(listMatch[1]);
+            index += 1;
+            continue;
+          }
+
+          flushList();
+          if (/^###?\s+/.test(line)) html += `<h3>${line.replace(/^###?\s+/, "")}</h3>`;
+          else html += `<p>${line}</p>`;
+          index += 1;
+        }
+        flushList();
+        return html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      }
+
+      function addMessage(text, role) {
+        const item = document.createElement("article");
+        item.className = `message ${role}`;
+        if (role === "bot") {
+          item.innerHTML = `<div class="message-avatar" aria-hidden="true">+</div><div class="message-content"><p class="message-label">Medibook assistant</p><div class="answer">${renderAnswer(text)}</div></div>`;
+        } else {
+          const paragraph = document.createElement("p");
+          paragraph.textContent = text;
+          item.appendChild(paragraph);
+        }
+        messages.appendChild(item);
+        messages.scrollTop = messages.scrollHeight;
+      }
+
+      function setLoading(isLoading) {
+        status.innerHTML = isLoading ? '<span class="status-dot loading-dot"></span>Thinking' : '<span class="status-dot"></span>Ready';
+        form.querySelector("button").disabled = isLoading;
+      }
+
+      document.querySelectorAll(".suggestion").forEach((button) => {
+        button.addEventListener("click", () => {
+          input.value = button.dataset.question;
+          input.focus();
+        });
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const text = input.value.trim();
+        if (!text) return;
+
+        addMessage(text, "user");
+        input.value = "";
+        setLoading(true);
+
+        const body = new FormData();
+        body.append("msg", text);
+
+        try {
+          const response = await fetch("/get", { method: "POST", body });
+          const data = await response.json();
+          addMessage(data.answer || data.error || "No answer returned.", "bot");
+        } catch (error) {
+          addMessage("The server could not process the request.", "bot");
+        } finally {
+          setLoading(false);
+          input.focus();
+        }
+      });
+
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          form.requestSubmit();
+        }
+      });
+    </script>
+  </body>
+</html>

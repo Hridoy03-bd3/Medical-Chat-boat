@@ -1,4 +1,4 @@
-# Medical-Chatbot-Project
+# Medical Chatbot Project
 
 
 
@@ -27,11 +27,14 @@ pip install -r requirements.txt
 ```
 
 
-### Create a `.env` file in the root directory and add your Pinecone & openai credentials as follows:
+### Create a `.env` file in the root directory and add your Pinecone and Groq credentials as follows:
 
 ```ini
-PINECONE_API_KEY = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-OPENAI_API_KEY = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+PINECONE_API_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+GROQ_API_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+PINECONE_INDEX_NAME="medical-chatbot"
+LLM_PROVIDER="groq"
+GROQ_MODEL="openai/gpt-oss-20b"
 ```
 
 
@@ -47,7 +50,7 @@ python app.py
 
 Now,
 ```bash
-open up localhost:
+open http://localhost:8080
 ```
 
 
